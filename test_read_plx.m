@@ -9,6 +9,7 @@ StartingFileName = '';
 %StartingFileName = 'C:\PlexonData\CM_Quickstart.plx';
 [OpenedFileName, Version, Freq, Comment, Trodalness, NPW, PreThresh, SpikePeakV, SpikeADResBits, SlowPeakV, SlowADResBits, Duration, DateTime] = plx_information(StartingFileName);
 
+disp([]);
 disp(['Opened File Name: ' OpenedFileName]);
 disp(['Version: ' num2str(Version)]);
 disp(['Sampling frequency : ' num2str(Freq)]);
@@ -119,7 +120,7 @@ if firstSpikeChannel > 0
     % get some timestamps for channel 1 unit a
     [nts, ts] = plx_ts(OpenedFileName, 1, 1);
     
-    disp(['Showing data from channel "' channames(firstSpikeChannel,:) '":']);
+    disp(['Showing spike data from channel "' channames(firstSpikeChannel,:) '":']);
 
     % Display timestamps of first 10 samples
     numSamplesToShow = min([nts, 10]);
@@ -156,11 +157,14 @@ end
 if firstAD_Channel > 0
     
     % get some continuous a/d data
-    [adfreq, nad, tsad, fnad, ad] = plx_ad(OpenedFileName, firstAD_Channel);
+    [adfreq, nad, tsad, fnad, ad] = plx_ad(OpenedFileName, firstAD_Channel - 1);
     if nad > 0
         % get just a span of a/d data
-        [adfreq, nadspan, adspan] = plx_ad_span(OpenedFileName, firstAD_Channel, 1,1000);
-        
+        [adfreq, nadspan, adspan] = plx_ad_span(OpenedFileName, firstAD_Channel - 1, 1,1000);
+
+        disp(['Showing continuous data from channel "' ad_channames(firstAD_Channel,:) '":']);
+
+
         % Send plot to a new window
         figure;
         % Plot first 1000 samples in red
