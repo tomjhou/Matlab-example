@@ -156,10 +156,10 @@ end
 % Show EEG/continuous data
 if firstAD_Channel > 0
     
-    % get some continuous a/d data
+    % get all data from specified EEG/continuous channel
     [adfreq, nad, tsad, fnad, ad] = plx_ad(OpenedFileName, firstAD_Channel - 1);
     if nad > 0
-        % get just a span of a/d data
+        % get just a subset of a/d data for sample plot
         [adfreq, nadspan, adspan] = plx_ad_span(OpenedFileName, firstAD_Channel - 1, 1,1000);
 
         disp(['Showing continuous data from channel "' ad_channames(firstAD_Channel,:) '":']);
