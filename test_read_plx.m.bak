@@ -157,13 +157,11 @@ if firstSpikeChannel > 0
         
         % Convert from raw binary values to voltages
         waves_to_plot = waves_to_plot * voltage_range / sample_range;
-        
-        time_values = (1:PointsPerWaveform) / SamplingFreq;
-        plot(time_values * 1000000, waves_to_plot);
+        plot(waves_to_plot);
         % strtrim removes trailing blank space that plx_names appends
         title(['Waveforms in channel "' strtrim(spike_chan_names(firstSpikeChannel,:)) '"']);
         
-        xlabel('Time (microseconds)');
+        xlabel('Time (seconds)');
         ylabel('Voltage');
 
     end
