@@ -1,0 +1,245 @@
+% This script tests PLX import routines
+%
+% This script was downloaded from Plexon's website, then modified to make
+% it more intuitive to new users.
+disp(' ');
+
+% Open a plx file
+[OpenedFileName, Version, SamplingFreq, Comment, Trodalness, PointsPerWaveform, PointsPerWaveformPreThreshold, ...
+    SpikeChannelMaxRangeMillivolts, SpikeChannelResolutionBits, ContinuousChannelMaxRangeMillivolts, ContinuousChannelResolutionBits, ...
+    DurationSeconds, DateTimeString] = plx_information('');
+
+disp(' ');
+disp(['File Name: ' OpenedFileName]);
+disp(['Version: ' num2str(Version)]);
+disp(['Sampling frequency : ' num2str(SamplingFreq)]);
+disp(['Comment : ' Comment]);
+disp(['Date/Time : ' DateTimeString]);
+disp(['File Duration (seconds): ' num2str(DurationSeconds)]);
+disp(['Num waveform points : ' num2str(PointsPerWaveform)]);
+disp(['Num waveform points pre-threshold : ' num2str(PointsPerWaveformPreThreshold)]);
+
+disp(['Spike Channel Voltage Range (positive only) (mV) : ' num2str(SpikeChannelMaxRangeMillivolts)]);
+disp(['Spike A/D Resolution (bits) : ' num2str(SpikeChannelResolutionBits)]);
+disp(['Continuous Channel Voltage Range (positive only) (mV) : ' num2str(ContinuousChannelMaxRangeMillivolts)]);
+disp(['Continuous channel A/D Resolution (bits) : ' num2str(ContinuousChannelResolutionBits)]);
+
+
+% get counts of # of events for spike, waveform, event, and continuous data channels
+[spike_counts, waveform_counts, event_counts, continuous_sample_counts] = plx_info(OpenedFileName,1);
+
+% tscounts, wfcounts are indexed by (channel+1,unit+1)
+% tscounts(:,ch+1) is the per-unit counts for channel ch
+% sum( tscounts(:,ch+1) ) is the total wfs for channel ch (all units)
+% [nunits, nchannels+1] = size( tscounts )
+% To get number of nonzero units/channels, use nnz() function
+
+% The next three variables help us look for first spike and continuous channels that have data (i.e. are
+% non-empty).
+firstSpikeChannel = -1;
+firstSpikeChannelWithSortedUnits = -1;
+firstSortUnit = -1; % This will be zero for unsorted spikes, 1 for sorted unit "a"
+firstContinuous_Channel_Wire = -1;
+firstContinuous_Channel_Index = -1;
+
+disp(' ');
+% get spike channel names
+[n, spike_chan_names] = plx_chan_names(OpenedFileName);
+[n, spike_channel_wire] = plx_chanmap(OpenedFileName);
+fprintf('Number of spike channels in file header (not all may have data) : %d\n', n);
+for x = 1:n
+
+    % plx_chan_names function returns null-padded string names. This can cause
+    % problems later, e.g. when using names as graph titles.
+    % The following line replaces all nulls with white space
+    spike_chan_names(spike_chan_names == 0) = 32;
+    
+    % Display names of all channels that are non-empty.
+    if spike_counts(1,x+1) > 0
+        % note the use of x+1, not x, in index for tscounts. Why did Plexon
+        % have to make this so weird?
+        fprintf('Channel %d is named %s, and has %d spikes\n', x, spike_chan_names(x,:), spike_counts(1,x+1));
+    end
+
+    if (firstSpikeChannel < 0) && (spike_counts(1,x+1) > 0)
+        % Find the first channel that has any spike data, whether sorted or
+        % not
+        firstSpikeChannel = x;
+        firstSortUnit = 0;
+    end
+    if (firstSpikeChannelWithSortedUnits < 0) && (spike_counts(2,x+1) > 0)
+        % Find the first channel that has a SORTED unit "a"
+        firstSpikeChannelWithSortedUnits = x;
+        % Channel with sorted data will take precedence over channel with
+        % only unsorted data
+        firstSpikeChannel = x;
+        firstSortUnit = 1;
+    end
+end
+
+disp(' ');
+% Get EEG channel wire #. Normally the wires are sequential (1, 2, 3 ...)
+% but there could be non-consecutive channels, or map could starts at 0.
+% Wire number is used to retrieve raw data.
+[n, continuous_channel_wire] = plx_ad_chanmap(OpenedFileName);
+% get EEG channel names
+[n, continuous_channames] = plx_adchan_names(OpenedFileName);
+fprintf('Number of continuous/EEG channels in file header (not all may have data) : %d\n', n);
+for x = 1:n
+
+    % plx_adchan_names function returns null-padded string names.
+    % We replace nulls with white space to avoid problems later, e.g. when
+    % names are used as graph axis/legend/title text.
+    continuous_channames(continuous_channames == 0) = 32;
+
+    % Display names of all non-empty continuous channel
+    if continuous_sample_counts(x) > 0
+        fprintf('EEG channel %d is named %s, and has %d points\n', x, continuous_channames(x,:), continuous_sample_counts(x));
+    end
+
+    % If this is the first non-empty continuous channel, then remember it.
+    if (firstContinuous_Channel_Wire < 0) && (continuous_sample_counts(x) > 0)
+            firstContinuous_Channel_Index = x;
+            firstContinuous_Channel_Wire = continuous_channel_wire(x);
+        else
+    end
+end
+
+disp('');
+
+% Show spike timestamps
+if firstSpikeChannel > 0
+
+    % get some timestamps for first available channel
+    [num_spikes, spike_timestamps] = plx_ts(OpenedFileName, firstSpikeChannel, firstSortUnit);
+    
+    fprintf('Showing spike data from channel "%s"\n', spike_chan_names(firstSpikeChannel,:));
+
+    numSamplesToShow = min([num_spikes, 10]);
+    if numSamplesToShow > 0
+        % Display timestamps of first 10 spikes
+        fprintf('First %d spikes have the following timestamps:\n', numSamplesToShow);
+        for x = 1:numSamplesToShow
+            disp(['  Sample ' num2str(x) ': ' num2str(spike_timestamps(x)) ' sec']);
+        end
+    end
+    
+    [num_waveforms, npw, waveform_timestamps, spike_waveforms] = plx_waves(OpenedFileName, firstSpikeChannel, firstSortUnit);
+    if num_waveforms > 0
+        
+        % Get channel gains so we can compute voltages
+        [n,spike_channel_gains] = plx_chan_gains(OpenedFileName);
+        
+        % Calculate scaling factors for converting raw values to voltages
+        % The following is the # of samples between lowest and highest voltage.
+        % Typically 2^16 = 65536.
+        sample_range = 2 ^ SpikeChannelResolutionBits;
+        % The following is the difference between highest and lowest possible
+        % voltage. Note the multiplication by 2, because this range is
+        % two-sided, i.e. includes negative numbers as well.
+        voltage_range = 2 * SpikeChannelMaxRangeMillivolts / 1000 / spike_channel_gains(firstSpikeChannel);
+
+        % Show at most 20 waveforms
+        num_waveforms = min(num_waveforms, 20);
+
+        % Transpose to be compatible with what plot function expects.
+        waves_to_plot = spike_waveforms(1:num_waveforms, :)';
+        
+        % Convert from raw binary values to voltages
+        waves_to_plot = waves_to_plot * voltage_range / sample_range;
+        
+        time_values = (1:PointsPerWaveform) / SamplingFreq;
+        plot(time_values * 1000000, waves_to_plot);
+        % strtrim removes trailing blank space that plx_names appends
+        title(['Waveforms in channel "' strtrim(spike_chan_names(firstSpikeChannel,:)) '"']);
+        
+        xlabel('Time (microseconds)');
+        ylabel('Voltage');
+
+    end
+else
+    disp('No spike channels with data were found in this file.');
+end
+    
+% Show EEG/continuous data
+if firstContinuous_Channel_Index > 0
+    
+    % get all data from specified EEG/continuous channel. Note that the
+    % channel index here is ZERO-based, so we have to subtract one from the
+    % ONE-based channel number in firstAD_Channel.
+
+    fprintf('\nSelect option for plotting EEG/continuous data:\n');
+    fprintf('1: Read and plot all data from first EEG/continuous channel (not recommended for very large files)\n');
+    fprintf('2: Read and plot first 1000 samples only\n');
+    answer = input('Please select option: ');
+
+    % Get channel gains. 
+    [n,continuous_channel_gains] = plx_adchan_gains(OpenedFileName);
+    
+    % Calculate scaling factors for converting raw values to voltages
+    % The following is the # of samples between lowest and highest voltage.
+    % Typically 2^16 = 65536.
+    sample_range = 2 ^ ContinuousChannelResolutionBits;
+    % The following is the difference between highest and lowest possible
+    % voltage. Note the multiplication by 2, because this range is
+    % two-sided, i.e. includes negative numbers as well.
+    voltage_range = 2 * ContinuousChannelMaxRangeMillivolts / 1000 / continuous_channel_gains(firstContinuous_Channel_Index);
+
+    if answer ~= 1 && answer ~= 2
+        fprintf('Invalid option\n');
+        plx_close('');
+        return;
+    end
+    
+    if answer == 1
+        
+        % Read all data. If file is very large, this could suck up a lot of
+        % memory.
+    
+        % plx_ad_span retrieves all data into one large vector. If there are
+        % any acquisition gaps, they will be padded with zeros.
+        [continuous_sample_freq, total_num_datapoints, raw_ad_values] = plx_ad_span(OpenedFileName, firstContinuous_Channel_Wire, 1, continuous_sample_counts(firstContinuous_Channel_Index));
+
+        % One disadvantage of plx_ad_span is that you have to already know the
+        % final timestamp in order to get all data (it is the last argument passed).
+        % If you instead use plx_ad(), you don't have to know the data length. But it
+        % may retrieve data in several chunks, which you'll have to concatenate
+        % back together. The number of chunks is somewhat
+        % machine-dependent, and if there are gaps, you'll have to pad them
+        % yourself. Your choice.
+    %    [adfreq, total_num_datapoints, timestamps, fragment_lengths, raw_ad_values] = plx_ad(OpenedFileName, firstAD_Channel - 1);
+
+    elseif answer == 2
+        
+        % get first 1000 samples only.
+        [continuous_sample_freq, total_num_datapoints, raw_ad_values] = plx_ad_span(OpenedFileName, firstContinuous_Channel_Wire, 1,1000);
+
+    else
+        
+        fprintf('Invalid option\n');
+        
+    end
+    
+    fprintf('Showing continuous data from channel "%s"\n', continuous_channames(firstContinuous_Channel_Index,:));
+
+    % Convert raw values to voltages
+    continuous_voltages = raw_ad_values / sample_range * voltage_range;
+
+    % Send plot to a new window
+    figure;
+
+    % Calculate timestamps in seconds
+    time_values = (1:length(continuous_voltages)) / continuous_sample_freq;
+
+    % Plot first 1000 samples as voltage versus time (seconds) in red
+    plot(time_values, continuous_voltages, 'r' );
+    title(['Showing ' num2str(total_num_datapoints) ' samples of continuous/EEG channel "' strtrim(continuous_channames(firstContinuous_Channel_Index,:)) '"'], 'interpreter', 'none');
+    xlabel('Time (seconds)');
+    ylabel('Voltage');
+
+end
+
+
+
+% Close all open files
+plx_close('');
